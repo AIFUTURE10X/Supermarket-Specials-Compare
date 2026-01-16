@@ -43,7 +43,12 @@
       "Bash(.venv/Scripts/python.exe:*)",
       "Bash(git init:*)",
       "Bash(git remote add:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: Supermarket Specials Compare\n\nFull-stack application for comparing supermarket specials across\nAustralian stores \\(Woolworths, Coles, ALDI, IGA\\).\n\nFeatures:\n- FastAPI backend with SQLite database\n- React + Vite + TailwindCSS frontend\n- Smart product categorization system\n- Category-aware search\n- Price comparison tools\n- Web scraping integration\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd project README and note Docker is not used\n\n- Created root README.md with project overview and quick start guide\n- Updated docker/README.md to note it''s not currently in use\n- Main app runs with start-dev.bat \\(Python + Node.js\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

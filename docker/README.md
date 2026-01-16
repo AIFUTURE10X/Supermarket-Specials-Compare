@@ -1,5 +1,9 @@
 # Australian Grocery Price Database - Local Setup
 
+> **NOTE:** This Docker setup is **not currently used**. The main application runs directly with Python and Node.js using `start-dev.bat`. See the [main README](../README.md) for instructions.
+
+---
+
 This Docker setup runs the [aus_grocery_price_database](https://github.com/tjhowse/aus_grocery_price_database) project locally, collecting real-time prices from Woolworths and Coles.
 
 ## Prerequisites
