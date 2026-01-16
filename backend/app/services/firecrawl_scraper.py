@@ -18,6 +18,7 @@ from app.models import Store, Special, ScrapeLog, MasterProduct, ProductPrice, C
 from app.config import get_settings
 from app.services.image_cache import image_cache
 from app.services.auto_categorizer import categorize_product
+from app.services.brand_extractor import extract_brand_from_name, extract_size_from_name
 
 logger = logging.getLogger(__name__)
 
@@ -566,8 +567,12 @@ Include ALL products. Return in the products array."""
                         Special.valid_from == today
                     ).first()
 
+                # Extract brand and size from name if not provided
+                brand = item.get("brand") or extract_brand_from_name(item["name"])
+                size = item.get("size") or extract_size_from_name(item["name"])
+
                 # Auto-categorize product
-                category_slug = categorize_product(item["name"], item.get("brand"))
+                category_slug = categorize_product(item["name"], brand)
                 category_id = category_map.get(category_slug) if category_slug else None
 
                 if existing:
@@ -580,13 +585,19 @@ Include ALL products. Return in the products array."""
                     # Update category_id if not set
                     if not existing.category_id and category_id:
                         existing.category_id = category_id
+                    # Update brand if not set
+                    if not existing.brand and brand:
+                        existing.brand = brand
+                    # Update size if not set
+                    if not existing.size and size:
+                        existing.size = size
                 else:
                     # Create new
                     special = Special(
                         store_id=store.id,
                         name=item["name"],
-                        brand=item.get("brand"),
-                        size=item.get("size"),
+                        brand=brand,
+                        size=size,
                         category=item.get("category"),
                         category_id=category_id,  # Auto-categorized
                         price=Decimal(str(item["price"])),
