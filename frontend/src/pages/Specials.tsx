@@ -3,11 +3,76 @@ import { getSpecials, getSpecialsStats, getSpecialsCategories, getStores } from 
 import { SpecialCard } from '../components/SpecialCard';
 import type { Special, SpecialsStats, CategoryCount, Store } from '../types';
 
-const STORE_COLORS: Record<string, string> = {
-  woolworths: 'bg-[#00A651]',
-  coles: 'bg-[#E01A22]',
-  aldi: 'bg-[#00448C]',
-};
+const STORES = [
+  {
+    slug: 'woolworths',
+    name: 'Woolworths',
+    color: 'bg-green-600 hover:bg-green-700',
+    textColor: 'text-white',
+    borderColor: 'border-green-600',
+    inactiveColor: 'bg-green-50 text-green-700 hover:bg-green-100 border-green-200',
+  },
+  {
+    slug: 'coles',
+    name: 'Coles',
+    color: 'bg-red-600 hover:bg-red-700',
+    textColor: 'text-white',
+    borderColor: 'border-red-600',
+    inactiveColor: 'bg-red-50 text-red-700 hover:bg-red-100 border-red-200',
+  },
+  {
+    slug: 'aldi',
+    name: 'ALDI',
+    color: 'bg-blue-600 hover:bg-blue-700',
+    textColor: 'text-white',
+    borderColor: 'border-blue-600',
+    inactiveColor: 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200',
+  },
+  {
+    slug: 'iga',
+    name: 'IGA',
+    color: 'bg-orange-500 hover:bg-orange-600',
+    textColor: 'text-white',
+    borderColor: 'border-orange-500',
+    inactiveColor: 'bg-orange-50 text-orange-700 hover:bg-orange-100 border-orange-200',
+  },
+] as const;
+
+// Store icon component with brand colors
+function StoreIcon({ store }: { store: string }) {
+  switch (store) {
+    case 'woolworths':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#1e8e3e" />
+          <text x="12" y="16" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">W</text>
+        </svg>
+      );
+    case 'coles':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#e01a22" />
+          <text x="12" y="16" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">C</text>
+        </svg>
+      );
+    case 'aldi':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#00457c" />
+          <text x="12" y="16" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">A</text>
+        </svg>
+      );
+    case 'iga':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#f7941d" />
+          <text x="12" y="16" textAnchor="middle" fontSize="11" fill="white" fontWeight="bold">I</text>
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
 
 const DISCOUNT_OPTIONS = [
   { value: 0, label: 'All Discounts' },
@@ -24,7 +89,7 @@ const SORT_OPTIONS = [
 
 export function Specials() {
   const [specials, setSpecials] = useState<Special[]>([]);
-  const [stores, setStores] = useState<Store[]>([]);
+  const [_stores, setStores] = useState<Store[]>([]);
   const [stats, setStats] = useState<SpecialsStats | null>(null);
   const [categories, setCategories] = useState<CategoryCount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,10 +232,10 @@ export function Specials() {
       <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setSelectedStore('')}
-          className={`px-5 py-2.5 rounded-full font-medium text-sm transition-all ${
+          className={`px-4 py-2 rounded-full font-medium text-sm transition-all border ${
             !selectedStore
-              ? 'bg-gray-900 text-white shadow-lg'
-              : 'bg-white text-gray-600 hover:bg-gray-100 border'
+              ? 'bg-gray-800 text-white border-gray-800'
+              : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200'
           }`}
         >
           All Stores
@@ -178,19 +243,20 @@ export function Specials() {
             <span className="ml-2 text-xs opacity-75">({stats.total_specials})</span>
           )}
         </button>
-        {stores.map((store) => (
+        {STORES.map((store) => (
           <button
-            key={store.id}
-            onClick={() => setSelectedStore(store.slug)}
-            className={`px-5 py-2.5 rounded-full font-medium text-sm transition-all ${
+            key={store.slug}
+            onClick={() => setSelectedStore(selectedStore === store.slug ? '' : store.slug)}
+            className={`px-4 py-2 rounded-full font-medium text-sm transition-all border flex items-center gap-1.5 ${
               selectedStore === store.slug
-                ? `${STORE_COLORS[store.slug]} text-white shadow-lg`
-                : 'bg-white text-gray-600 hover:bg-gray-100 border'
+                ? `${store.color} ${store.textColor} ${store.borderColor}`
+                : store.inactiveColor
             }`}
           >
+            <StoreIcon store={store.slug} />
             {store.name}
             {stats?.by_store[store.slug] !== undefined && (
-              <span className="ml-2 text-xs opacity-75">({stats.by_store[store.slug]})</span>
+              <span className="ml-1 text-xs opacity-75">({stats.by_store[store.slug]})</span>
             )}
           </button>
         ))}

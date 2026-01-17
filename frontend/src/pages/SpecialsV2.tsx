@@ -17,7 +17,7 @@ import {
   usePrefetchSpecials,
   type SpecialsFilters,
 } from '../api/hooks';
-import type { Special, Store } from '../types';
+import type { Special } from '../types';
 import { CategoryTabs } from '../components/CategoryNav/CategoryTabs';
 import { CategorySidebar } from '../components/CategoryNav/CategorySidebar';
 import { FilterChips } from '../components/FilterChips';
@@ -29,6 +29,77 @@ const STORE_COLORS: Record<string, string> = {
   aldi: 'bg-[#00448C]',
   iga: 'bg-[#FF6B00]',
 };
+
+const STORES = [
+  {
+    slug: 'woolworths',
+    name: 'Woolworths',
+    color: 'bg-green-600 hover:bg-green-700',
+    textColor: 'text-white',
+    borderColor: 'border-green-600',
+    inactiveColor: 'bg-green-50 text-green-700 hover:bg-green-100 border-green-200',
+  },
+  {
+    slug: 'coles',
+    name: 'Coles',
+    color: 'bg-red-600 hover:bg-red-700',
+    textColor: 'text-white',
+    borderColor: 'border-red-600',
+    inactiveColor: 'bg-red-50 text-red-700 hover:bg-red-100 border-red-200',
+  },
+  {
+    slug: 'aldi',
+    name: 'ALDI',
+    color: 'bg-blue-600 hover:bg-blue-700',
+    textColor: 'text-white',
+    borderColor: 'border-blue-600',
+    inactiveColor: 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200',
+  },
+  {
+    slug: 'iga',
+    name: 'IGA',
+    color: 'bg-orange-500 hover:bg-orange-600',
+    textColor: 'text-white',
+    borderColor: 'border-orange-500',
+    inactiveColor: 'bg-orange-50 text-orange-700 hover:bg-orange-100 border-orange-200',
+  },
+] as const;
+
+// Store icon component with brand colors
+function StoreIcon({ store }: { store: string }) {
+  switch (store) {
+    case 'woolworths':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#1e8e3e" />
+          <text x="12" y="16" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">W</text>
+        </svg>
+      );
+    case 'coles':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#e01a22" />
+          <text x="12" y="16" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">C</text>
+        </svg>
+      );
+    case 'aldi':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#00457c" />
+          <text x="12" y="16" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">A</text>
+        </svg>
+      );
+    case 'iga':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#f7941d" />
+          <text x="12" y="16" textAnchor="middle" fontSize="11" fill="white" fontWeight="bold">I</text>
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
 
 const DISCOUNT_OPTIONS = [
   { value: 0, label: 'All Discounts' },
@@ -131,43 +202,6 @@ const ProductCard = memo(function ProductCard({
   );
 });
 
-// Store Tab Button with prefetch on hover
-const StoreTab = memo(function StoreTab({
-  store,
-  isSelected,
-  count,
-  onClick,
-  onHover,
-}: {
-  store?: Store;
-  isSelected: boolean;
-  count?: number;
-  onClick: () => void;
-  onHover: () => void;
-}) {
-  const slug = store?.slug || '';
-  const name = store?.name || 'All Stores';
-
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={onHover}
-      className={`px-5 py-2.5 rounded-full font-medium text-sm transition-all ${
-        isSelected
-          ? slug
-            ? `${STORE_COLORS[slug]} text-white shadow-lg`
-            : 'bg-gray-900 text-white shadow-lg'
-          : 'bg-white text-gray-600 hover:bg-gray-100 border'
-      }`}
-    >
-      {name}
-      {count !== undefined && (
-        <span className="ml-2 text-xs opacity-75">({count})</span>
-      )}
-    </button>
-  );
-});
-
 // Infinite scroll trigger
 function LoadMoreTrigger({
   onLoadMore,
@@ -245,7 +279,7 @@ export function SpecialsV2() {
   );
 
   // React Query hooks
-  const { data: stores = [] } = useStores();
+  const { data: _stores = [] } = useStores();
   const { data: stats } = useStats();
   const { data: categoryTree } = useCategoryTree();
   const {
@@ -318,13 +352,33 @@ export function SpecialsV2() {
     <div className="space-y-6">
       {/* Header with Stats */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
-        <h1 className="text-3xl font-bold mb-2">Weekly Specials</h1>
+        <h1 className="text-3xl font-bold mb-2">This Week's Deals</h1>
         <p className="text-blue-100 mb-4">
-          Find the best deals from Woolworths, Coles & ALDI
+          Grab the hottest discounts before they're gone
         </p>
 
         {stats && (
-          <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex flex-wrap gap-4 text-sm items-center">
+            {/* Page Navigation Buttons */}
+            <a
+              href="/"
+              className="px-5 py-2 rounded-full font-semibold text-sm transition-all bg-orange-500 hover:bg-orange-400 text-white shadow-lg ring-2 ring-white"
+            >
+              Specials
+            </a>
+            <a
+              href="/staples"
+              className="px-5 py-2 rounded-full font-semibold text-sm transition-all bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg"
+            >
+              Staples
+            </a>
+            <a
+              href="/compare"
+              className="px-5 py-2 rounded-full font-semibold text-sm transition-all bg-pink-500 hover:bg-pink-400 text-white shadow-lg"
+            >
+              Compare
+            </a>
+
             <div className="bg-white/20 rounded-lg px-4 py-2">
               <span className="font-bold text-xl">{stats.total_specials}</span>
               <span className="ml-2">Total Specials</span>
@@ -343,23 +397,40 @@ export function SpecialsV2() {
       </div>
 
       {/* Store Tabs with Prefetch */}
-      <div className="flex flex-wrap gap-2">
-        <StoreTab
-          isSelected={!selectedStore}
-          count={stats?.total_specials}
+      <div className="flex flex-wrap gap-2 items-center">
+        <button
           onClick={() => handleStoreClick('')}
-          onHover={() => handleStorePrefetch('')}
-        />
-        {stores.map((store) => (
-          <StoreTab
-            key={store.id}
-            store={store}
-            isSelected={selectedStore === store.slug}
-            count={stats?.by_store[store.slug]}
-            onClick={() => handleStoreClick(store.slug)}
-            onHover={() => handleStorePrefetch(store.slug)}
-          />
+          onMouseEnter={() => handleStorePrefetch('')}
+          className={`px-4 py-2 rounded-full font-medium text-sm transition-all border ${
+            !selectedStore
+              ? 'bg-gray-800 text-white border-gray-800'
+              : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200'
+          }`}
+        >
+          All Stores
+          {stats && (
+            <span className="ml-2 text-xs opacity-75">({stats.total_specials})</span>
+          )}
+        </button>
+        {STORES.map((store) => (
+          <button
+            key={store.slug}
+            onClick={() => handleStoreClick(selectedStore === store.slug ? '' : store.slug)}
+            onMouseEnter={() => handleStorePrefetch(store.slug)}
+            className={`px-4 py-2 rounded-full font-medium text-sm transition-all border flex items-center gap-1.5 ${
+              selectedStore === store.slug
+                ? `${store.color} ${store.textColor} ${store.borderColor}`
+                : store.inactiveColor
+            }`}
+          >
+            <StoreIcon store={store.slug} />
+            {store.name}
+            {stats?.by_store[store.slug] !== undefined && (
+              <span className="ml-1 text-xs opacity-75">({stats.by_store[store.slug]})</span>
+            )}
+          </button>
         ))}
+
       </div>
 
       {/* Mobile Category Tabs - hidden on desktop */}

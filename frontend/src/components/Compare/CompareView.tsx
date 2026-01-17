@@ -198,12 +198,10 @@ function TypeComparisonView({ data }: { data: TypeMatchResult }) {
 
 // Brand comparison - ALL products from same brand across stores
 function BrandComparisonView({
-  special,
   data,
   isLoading,
   error,
 }: {
-  special: Special;
   data: BrandProductsResult | undefined;
   isLoading: boolean;
   error: Error | null;
@@ -365,7 +363,6 @@ export function CompareView({ special, onClose }: CompareViewProps) {
             )
           ) : (
             <BrandComparisonView
-              special={special}
               data={brandData}
               isLoading={brandLoading}
               error={brandError}

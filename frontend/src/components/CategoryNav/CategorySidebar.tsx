@@ -4,28 +4,7 @@
 import { useState, memo } from 'react';
 import type { CategoryTreeItem } from '../../types';
 
-// Category images/icons mapping
-const CATEGORY_IMAGES: Record<string, string> = {
-  'fruit-veg': '/categories/fruit-veg.png',
-  'meat-seafood': '/categories/meat-seafood.png',
-  'deli': '/categories/deli.png',
-  'dairy-eggs-fridge': '/categories/dairy.png',
-  'bakery': '/categories/bakery.png',
-  'pantry': '/categories/pantry.png',
-  'drinks': '/categories/drinks.png',
-  'freezer': '/categories/freezer.png',
-  'snacks-confectionery': '/categories/snacks.png',
-  'international': '/categories/international.png',
-  'liquor': '/categories/liquor.png',
-  'beauty': '/categories/beauty.png',
-  'personal-care': '/categories/personal-care.png',
-  'health': '/categories/health.png',
-  'cleaning-household': '/categories/cleaning.png',
-  'baby': '/categories/baby.png',
-  'pet': '/categories/pet.png',
-};
-
-// Fallback emoji icons
+// Category emoji icons
 const CATEGORY_ICONS: Record<string, string> = {
   'fruit-veg': '🍎',
   'meat-seafood': '🍗',

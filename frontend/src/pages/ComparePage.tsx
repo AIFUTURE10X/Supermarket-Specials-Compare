@@ -1,340 +1,281 @@
 /**
- * ComparePage - Dedicated product comparison search page
+ * Compare Page - Price comparison across all stores
  *
- * Features:
- * - Search bar to find any product
- * - Results grouped by product type
- * - All brands within each type with store prices
+ * Uses SpecialsV2 layout with Staples data to show multi-store prices.
+ * Focus is on finding the best price for each product.
  */
-import { useState, useEffect, memo, useMemo } from 'react';
-import { useBrandMatch } from '../api/hooks';
-import type { BrandMatchResult, SpecialStorePrice } from '../types';
-import { FreshFoodsSection } from '../components/Compare/FreshFoodsSection';
+import { useState, useCallback, useRef, useEffect, memo, useMemo } from 'react';
+import { useStaplesInfinite, useStaplesCategories, type StaplesFilters } from '../api/hooks';
+import { StapleCard } from '../components/StapleCard';
+import type { StapleCategory } from '../types';
 
-const STORE_COLORS: Record<string, string> = {
-  woolworths: 'bg-[#00A651]',
-  coles: 'bg-[#E01A22]',
-  aldi: 'bg-[#00448C]',
-  iga: 'bg-[#FF6B00]',
+const STORES = [
+  {
+    slug: 'woolworths',
+    name: 'Woolworths',
+    color: 'bg-green-600 hover:bg-green-700',
+    textColor: 'text-white',
+    borderColor: 'border-green-600',
+    inactiveColor: 'bg-green-50 text-green-700 hover:bg-green-100 border-green-200',
+  },
+  {
+    slug: 'coles',
+    name: 'Coles',
+    color: 'bg-red-600 hover:bg-red-700',
+    textColor: 'text-white',
+    borderColor: 'border-red-600',
+    inactiveColor: 'bg-red-50 text-red-700 hover:bg-red-100 border-red-200',
+  },
+  {
+    slug: 'aldi',
+    name: 'ALDI',
+    color: 'bg-blue-600 hover:bg-blue-700',
+    textColor: 'text-white',
+    borderColor: 'border-blue-600',
+    inactiveColor: 'bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200',
+  },
+  {
+    slug: 'iga',
+    name: 'IGA',
+    color: 'bg-orange-500 hover:bg-orange-600',
+    textColor: 'text-white',
+    borderColor: 'border-orange-500',
+    inactiveColor: 'bg-orange-50 text-orange-700 hover:bg-orange-100 border-orange-200',
+  },
+] as const;
+
+const SORT_OPTIONS = [
+  { value: 'savings', label: 'Biggest Savings' },
+  { value: 'price_low', label: 'Price: Low to High' },
+  { value: 'price_high', label: 'Price: High to Low' },
+  { value: 'name', label: 'Name A-Z' },
+] as const;
+
+// Store icon component with brand colors
+function StoreIcon({ store }: { store: string }) {
+  switch (store) {
+    case 'woolworths':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#1e8e3e" />
+          <text x="12" y="16" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">W</text>
+        </svg>
+      );
+    case 'coles':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#e01a22" />
+          <text x="12" y="16" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">C</text>
+        </svg>
+      );
+    case 'aldi':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#00457c" />
+          <text x="12" y="16" textAnchor="middle" fontSize="12" fill="white" fontWeight="bold">A</text>
+        </svg>
+      );
+    case 'iga':
+      return (
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" fill="#f7941d" />
+          <text x="12" y="16" textAnchor="middle" fontSize="11" fill="white" fontWeight="bold">I</text>
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+// Category icons
+const CATEGORY_ICONS: Record<string, string> = {
+  'fruit': '🍎',
+  'vegetables': '🥕',
+  'meat': '🍗',
+  'seafood': '🐟',
+  'dairy': '🥛',
+  'bakery': '🍞',
+  'deli': '🥓',
 };
 
-const POPULAR_SEARCHES = ['Milk', 'Bread', 'Butter', 'Chocolate', 'Coca Cola', 'Cheese', 'Chicken'];
-
-// Extract product type from name (remove brand if present)
-function extractProductType(name: string, brand: string | null): string {
-  if (!brand) return name;
-  // Remove brand from start of name
-  const brandLower = brand.toLowerCase();
-  const nameLower = name.toLowerCase();
-  if (nameLower.startsWith(brandLower)) {
-    return name.slice(brand.length).trim();
-  }
-  return name;
-}
-
-// Group results by product type
-function groupByProductType(results: BrandMatchResult[]): Record<string, BrandMatchResult[]> {
-  const groups: Record<string, BrandMatchResult[]> = {};
-
-  for (const result of results) {
-    const type = extractProductType(result.product_name, result.brand);
-    // Add size to type for better grouping
-    const key = result.size ? `${type} (${result.size})` : type;
-
-    if (!groups[key]) {
-      groups[key] = [];
-    }
-    groups[key].push(result);
-  }
-
-  // Sort groups by number of options (more options first)
-  const sortedKeys = Object.keys(groups).sort(
-    (a, b) => groups[b].length - groups[a].length
-  );
-
-  const sortedGroups: Record<string, BrandMatchResult[]> = {};
-  for (const key of sortedKeys) {
-    sortedGroups[key] = groups[key];
-  }
-
-  return sortedGroups;
-}
-
-// Product card showing brand with store prices
-const ProductCompareCard = memo(function ProductCompareCard({
-  product,
-  onClick,
+// Infinite scroll trigger
+function LoadMoreTrigger({
+  onLoadMore,
+  hasMore,
+  isLoading,
 }: {
-  product: BrandMatchResult;
-  onClick: () => void;
+  onLoadMore: () => void;
+  hasMore: boolean;
+  isLoading: boolean;
 }) {
-  const storeCount = product.stores.length;
-  const cheapestStore = product.cheapest_store;
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!hasMore || isLoading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          onLoadMore();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+
+    if (triggerRef.current) {
+      observer.observe(triggerRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [hasMore, isLoading, onLoadMore]);
+
+  if (!hasMore) return null;
 
   return (
-    <div
-      onClick={onClick}
-      className="bg-white border rounded-xl p-4 hover:shadow-lg transition-shadow cursor-pointer group"
-    >
-      {/* Product image and info */}
-      <div className="flex items-start gap-3">
-        {product.stores[0]?.image_url && (
-          <img
-            src={product.stores[0].image_url}
-            alt=""
-            className="w-16 h-16 object-contain rounded bg-gray-50 group-hover:scale-105 transition-transform"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-sm text-gray-900 line-clamp-2">
-            {product.product_name}
-          </h4>
-          {product.brand && (
-            <p className="text-xs text-gray-500 mt-0.5">{product.brand}</p>
-          )}
-          {product.size && (
-            <p className="text-xs text-gray-400">{product.size}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Store price badges */}
-      <div className="mt-3 flex flex-wrap gap-1">
-        {product.stores.slice(0, 4).map((store) => (
-          <span
-            key={store.special_id}
-            className={`${STORE_COLORS[store.store_slug] || 'bg-gray-500'} text-white text-xs px-2 py-1 rounded font-medium`}
-          >
-            {store.price}
-          </span>
-        ))}
-        {product.stores.length > 4 && (
-          <span className="text-xs text-gray-400 px-2 py-1">
-            +{product.stores.length - 4} more
-          </span>
-        )}
-      </div>
-
-      {/* Savings indicator */}
-      <div className="mt-3 flex justify-between items-center text-xs">
-        <span className="text-gray-500">{storeCount} stores</span>
-        {product.savings_potential && (
-          <span className="text-green-600 font-medium">
-            Save up to {product.savings_potential}
-          </span>
-        )}
-      </div>
-
-      {cheapestStore && (
-        <div className="mt-2 text-xs text-green-700 bg-green-50 rounded px-2 py-1">
-          Best price at <strong>{cheapestStore}</strong>
-        </div>
+    <div ref={triggerRef} className="flex justify-center py-8">
+      {isLoading && (
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600" />
       )}
     </div>
   );
-});
+}
 
-// Product type group with expandable list
-const ProductTypeGroup = memo(function ProductTypeGroup({
-  typeName,
-  products,
-  onSelectProduct,
+// Category sidebar component
+const CategorySidebar = memo(function CategorySidebar({
+  categories,
+  selectedCategory,
+  onSelectCategory,
 }: {
-  typeName: string;
-  products: BrandMatchResult[];
-  onSelectProduct: (product: BrandMatchResult) => void;
+  categories: StapleCategory[];
+  selectedCategory: string | undefined;
+  onSelectCategory: (slug: string | undefined) => void;
 }) {
-  const [expanded, setExpanded] = useState(true);
-
-  // Sort products by number of stores (more availability first)
-  const sortedProducts = useMemo(
-    () => [...products].sort((a, b) => b.stores.length - a.stores.length),
-    [products]
-  );
-
   return (
     <div className="bg-white rounded-xl border overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b bg-gray-50">
+        <h2 className="font-semibold text-gray-900">Categories</h2>
+      </div>
+
+      {/* All Products option */}
       <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3 flex justify-between items-center bg-gray-50 hover:bg-gray-100 transition-colors"
+        onClick={() => onSelectCategory(undefined)}
+        className={`w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-100 ${
+          !selectedCategory ? 'bg-purple-50 border-l-4 border-l-purple-600' : ''
+        }`}
       >
-        <h3 className="font-semibold text-gray-900">{typeName}</h3>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">
-            {products.length} product{products.length > 1 ? 's' : ''}
-          </span>
-          <svg
-            className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
+        <span className="text-2xl w-8 h-8 flex items-center justify-center flex-shrink-0">
+          🏠
+        </span>
+        <span className={`flex-1 text-left text-sm ${!selectedCategory ? 'font-semibold text-purple-700' : 'text-gray-700'}`}>
+          All Products
+        </span>
+        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
       </button>
 
-      {expanded && (
-        <div className="p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sortedProducts.map((product) => (
-            <ProductCompareCard
-              key={`${product.brand}-${product.product_name}-${product.size}`}
-              product={product}
-              onClick={() => onSelectProduct(product)}
-            />
-          ))}
-        </div>
-      )}
+      {/* Category list */}
+      <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+        {categories.map((category) => {
+          const isSelected = selectedCategory === category.slug;
+          const icon = CATEGORY_ICONS[category.slug] || category.icon || '📦';
+
+          return (
+            <button
+              key={category.slug}
+              onClick={() => onSelectCategory(category.slug)}
+              className={`w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors border-b border-gray-100 ${
+                isSelected ? 'bg-purple-50 border-l-4 border-l-purple-600' : ''
+              }`}
+            >
+              <span className="text-2xl w-8 h-8 flex items-center justify-center flex-shrink-0">
+                {icon}
+              </span>
+              <span className={`flex-1 text-left text-sm ${isSelected ? 'font-semibold text-purple-700' : 'text-gray-700'}`}>
+                {category.name}
+              </span>
+              <span className="text-xs text-gray-400 mr-2">
+                ({category.count})
+              </span>
+              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 });
 
-// Detail modal showing full comparison
-const ProductCompareDetail = memo(function ProductCompareDetail({
-  product,
-  onClose,
+// Mobile category tabs
+const CategoryTabs = memo(function CategoryTabs({
+  categories,
+  selectedCategory,
+  onSelectCategory,
 }: {
-  product: BrandMatchResult;
-  onClose: () => void;
+  categories: StapleCategory[];
+  selectedCategory: string | undefined;
+  onSelectCategory: (slug: string | undefined) => void;
 }) {
-  const prices = product.stores.map((s) => parseFloat(s.price.replace('$', '')));
-  const cheapestPrice = Math.min(...prices);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="p-4 border-b">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">{product.product_name}</h2>
-              <p className="text-sm text-gray-500">
-                {product.brand && `${product.brand} • `}
-                {product.size}
-              </p>
-            </div>
+    <div className="relative">
+      <div
+        ref={scrollRef}
+        className="flex gap-2 overflow-x-auto scrollbar-hide py-2 px-1"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        {/* All Products tab */}
+        <button
+          onClick={() => onSelectCategory(undefined)}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-medium text-sm transition-all whitespace-nowrap ${
+            !selectedCategory
+              ? 'bg-purple-600 text-white shadow-md'
+              : 'bg-white text-gray-600 hover:bg-gray-100 border'
+          }`}
+        >
+          <span className="text-base">🏠</span>
+          <span>All</span>
+        </button>
+
+        {/* Category tabs */}
+        {categories.map((category) => {
+          const isSelected = selectedCategory === category.slug;
+          const icon = CATEGORY_ICONS[category.slug] || category.icon || '📦';
+
+          return (
             <button
-              onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              key={category.slug}
+              onClick={() => onSelectCategory(category.slug)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-medium text-sm transition-all whitespace-nowrap ${
+                isSelected
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'bg-white text-gray-600 hover:bg-gray-100 border'
+              }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <span className="text-base">{icon}</span>
+              <span>{category.name}</span>
+              <span className={`text-xs ${isSelected ? 'text-purple-200' : 'text-gray-400'}`}>
+                ({category.count})
+              </span>
             </button>
-          </div>
-        </div>
-
-        {/* Store prices */}
-        <div className="p-4 overflow-y-auto max-h-[60vh] space-y-2">
-          {product.stores
-            .sort((a, b) => parseFloat(a.price.replace('$', '')) - parseFloat(b.price.replace('$', '')))
-            .map((store) => {
-              const price = parseFloat(store.price.replace('$', ''));
-              const isCheapest = price === cheapestPrice;
-
-              return (
-                <div
-                  key={store.special_id}
-                  className={`flex items-center gap-3 p-3 rounded-lg ${
-                    isCheapest ? 'bg-green-50 border border-green-200' : 'bg-gray-50'
-                  }`}
-                >
-                  {/* Store badge */}
-                  <span
-                    className={`${STORE_COLORS[store.store_slug] || 'bg-gray-500'} text-white text-xs font-medium px-2 py-1 rounded`}
-                  >
-                    {store.store_name}
-                  </span>
-
-                  {/* Image */}
-                  {store.image_url && (
-                    <img
-                      src={store.image_url}
-                      alt=""
-                      className="w-10 h-10 object-contain rounded"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  )}
-
-                  {/* Price */}
-                  <div className="flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <span className={`text-lg font-bold ${isCheapest ? 'text-green-600' : 'text-gray-900'}`}>
-                        {store.price}
-                      </span>
-                      {store.was_price && (
-                        <span className="text-sm text-gray-400 line-through">{store.was_price}</span>
-                      )}
-                    </div>
-                    {store.unit_price && (
-                      <span className="text-xs text-gray-500">{store.unit_price}</span>
-                    )}
-                  </div>
-
-                  {/* Discount badge */}
-                  {store.discount_percent && store.discount_percent > 0 && (
-                    <span
-                      className={`text-xs font-bold px-2 py-1 rounded-full ${
-                        store.discount_percent >= 50 ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
-                      }`}
-                    >
-                      {store.discount_percent}% OFF
-                    </span>
-                  )}
-
-                  {/* Cheapest badge */}
-                  {isCheapest && (
-                    <span className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                      BEST
-                    </span>
-                  )}
-
-                  {/* Link */}
-                  {store.product_url && (
-                    <a
-                      href={store.product_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 text-sm"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      View
-                    </a>
-                  )}
-                </div>
-              );
-            })}
-        </div>
-
-        {/* Footer with savings */}
-        <div className="p-4 border-t bg-gray-50">
-          {product.savings_potential && (
-            <div className="text-center text-sm text-green-700 mb-3">
-              Save up to <strong>{product.savings_potential}</strong> by shopping at{' '}
-              <strong>{product.cheapest_store}</strong>
-            </div>
-          )}
-          <button
-            onClick={onClose}
-            className="w-full py-2 px-4 bg-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-300 transition-colors"
-          >
-            Close
-          </button>
-        </div>
+          );
+        })}
       </div>
     </div>
   );
 });
 
 export function ComparePage() {
+  // Filters state
+  const [selectedStore, setSelectedStore] = useState<string | undefined>(undefined);
+  const [selectedCategory, setSelectedCategory] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState<BrandMatchResult | null>(null);
+  const [sortBy, setSortBy] = useState<StaplesFilters['sort']>('savings');
 
   // Debounce search
   useEffect(() => {
@@ -344,138 +285,282 @@ export function ComparePage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const { data: results, isLoading, error } = useBrandMatch(debouncedSearch);
+  // Build filters object
+  const filters: Omit<StaplesFilters, 'offset'> = useMemo(
+    () => ({
+      category: selectedCategory,
+      store: selectedStore,
+      sort: sortBy,
+      search: debouncedSearch.length >= 2 ? debouncedSearch : undefined,
+      limit: 50,
+    }),
+    [selectedCategory, selectedStore, sortBy, debouncedSearch]
+  );
 
-  // Group results by product type
-  const groupedResults = useMemo(() => {
-    if (!results || results.length === 0) return {};
-    return groupByProductType(results);
-  }, [results]);
+  // Fetch data
+  const {
+    data: staplesData,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    isLoading,
+  } = useStaplesInfinite(filters);
 
-  const hasResults = Object.keys(groupedResults).length > 0;
+  const { data: categoriesData } = useStaplesCategories();
+
+  // Flatten pages into single array
+  const products = useMemo(
+    () => staplesData?.pages.flatMap((page) => page.products) ?? [],
+    [staplesData]
+  );
+
+  const total = staplesData?.pages[0]?.total ?? 0;
+  const totalProducts = categoriesData?.total_products ?? 0;
+
+  // Calculate stats
+  const avgSavings = useMemo(() => {
+    if (products.length === 0) return 0;
+    const totalSavings = products.reduce((sum, p) => sum + (p.savings_amount || 0), 0);
+    return Math.round(totalSavings / products.length / 100);
+  }, [products]);
+
+  // Handlers
+  const handleStoreClick = useCallback((slug: string | undefined) => {
+    setSelectedStore(prev => prev === slug ? undefined : slug);
+  }, []);
+
+  const handleLoadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const clearFilters = useCallback(() => {
+    setSelectedStore(undefined);
+    setSelectedCategory(undefined);
+    setSearchQuery('');
+    setSortBy('savings');
+  }, []);
+
+  const hasActiveFilters = selectedStore || selectedCategory || searchQuery;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with Stats + Page Navigation */}
       <div className="bg-gradient-to-r from-purple-600 to-indigo-700 rounded-2xl p-6 text-white">
-        <h1 className="text-3xl font-bold mb-2">Compare Products</h1>
-        <p className="text-purple-100">
-          Find the best prices for identical products across Woolworths, Coles, ALDI & IGA
+        <h1 className="text-3xl font-bold mb-2">Price Showdown</h1>
+        <p className="text-purple-100 mb-4">
+          See who's cheapest, store by store
         </p>
-      </div>
 
-      {/* Fresh Foods Section */}
-      <FreshFoodsSection />
-
-      {/* Search Section */}
-      <div className="bg-white rounded-xl border p-4">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search for a product (e.g., Cadbury Dairy Milk, Coca Cola, Milk 2L)"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 text-lg border-2 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-          />
-          <svg
-            className="absolute left-3 top-3.5 h-6 w-6 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+        <div className="flex flex-wrap gap-4 text-sm items-center">
+          {/* Page Navigation Buttons */}
+          <a
+            href="/"
+            className="px-5 py-2 rounded-full font-semibold text-sm transition-all bg-orange-500 hover:bg-orange-400 text-white shadow-lg"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          {isLoading && (
-            <div className="absolute right-3 top-3.5">
-              <div className="animate-spin h-6 w-6 border-2 border-purple-600 border-t-transparent rounded-full" />
+            Specials
+          </a>
+          <a
+            href="/staples"
+            className="px-5 py-2 rounded-full font-semibold text-sm transition-all bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg"
+          >
+            Staples
+          </a>
+          <a
+            href="/compare"
+            className="px-5 py-2 rounded-full font-semibold text-sm transition-all bg-pink-500 hover:bg-pink-400 text-white shadow-lg ring-2 ring-white"
+          >
+            Compare
+          </a>
+
+          <div className="bg-white/20 rounded-lg px-4 py-2">
+            <span className="font-bold text-xl">{totalProducts}</span>
+            <span className="ml-2">Products</span>
+          </div>
+          <div className="bg-white/20 rounded-lg px-4 py-2">
+            <span className="font-bold text-xl">4</span>
+            <span className="ml-2">Stores Compared</span>
+          </div>
+          {avgSavings > 0 && (
+            <div className="bg-white/20 rounded-lg px-4 py-2">
+              <span className="font-bold text-xl">${avgSavings}</span>
+              <span className="ml-2">Avg Savings</span>
             </div>
           )}
         </div>
-
-        {/* Popular searches */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <span className="text-sm text-gray-500">Popular:</span>
-          {POPULAR_SEARCHES.map((term) => (
-            <button
-              key={term}
-              onClick={() => setSearchQuery(term)}
-              className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                searchQuery === term
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {term}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Results */}
-      {debouncedSearch.length >= 2 ? (
-        error ? (
-          <div className="bg-white rounded-xl border p-12 text-center">
-            <div className="text-5xl mb-4">❌</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Error loading results</h3>
-            <p className="text-gray-500">Please try again later</p>
-          </div>
-        ) : isLoading ? (
-          <div className="bg-white rounded-xl border p-12 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto" />
-            <p className="text-gray-500 mt-4">Searching across all stores...</p>
-          </div>
-        ) : hasResults ? (
-          <div className="space-y-4">
-            <p className="text-gray-500">
-              Found {results?.length} products matching "{debouncedSearch}"
-            </p>
+      {/* Store Filters */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <button
+          onClick={() => handleStoreClick(undefined)}
+          className={`px-4 py-2 rounded-full font-medium text-sm transition-all border ${
+            !selectedStore
+              ? 'bg-gray-800 text-white border-gray-800'
+              : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200'
+          }`}
+        >
+          All Stores
+        </button>
+        {STORES.map((store) => (
+          <button
+            key={store.slug}
+            onClick={() => handleStoreClick(store.slug)}
+            className={`px-4 py-2 rounded-full font-medium text-sm transition-all border flex items-center gap-1.5 ${
+              selectedStore === store.slug
+                ? `${store.color} ${store.textColor} ${store.borderColor}`
+                : store.inactiveColor
+            }`}
+          >
+            <StoreIcon store={store.slug} />
+            {store.name}
+          </button>
+        ))}
+      </div>
 
-            {Object.entries(groupedResults).map(([type, products]) => (
-              <ProductTypeGroup
-                key={type}
-                typeName={type}
-                products={products}
-                onSelectProduct={setSelectedProduct}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl border p-12 text-center">
-            <div className="text-5xl mb-4">🔍</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
-            <p className="text-gray-500">
-              No products matching "{debouncedSearch}" are currently on special at multiple stores.
-            </p>
-            <p className="text-sm text-gray-400 mt-2">
-              Try a different search term or check back later for new specials.
-            </p>
-          </div>
-        )
-      ) : (
-        <div className="bg-white rounded-xl border p-12 text-center">
-          <div className="text-5xl mb-4">🛒</div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Search for products to compare</h3>
-          <p className="text-gray-500 max-w-md mx-auto">
-            Enter a product name above to find the best prices across Woolworths, Coles, ALDI, and IGA.
-          </p>
-          <p className="text-sm text-gray-400 mt-4">
-            Only products currently on special at multiple stores will be shown.
-          </p>
+      {/* Mobile Category Tabs */}
+      {categoriesData && (
+        <div className="lg:hidden bg-white rounded-xl border p-2">
+          <CategoryTabs
+            categories={categoriesData.categories}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+          />
         </div>
       )}
 
-      {/* Detail Modal */}
-      {selectedProduct && (
-        <ProductCompareDetail
-          product={selectedProduct}
-          onClose={() => setSelectedProduct(null)}
-        />
-      )}
+      {/* Main Content with Sidebar Layout */}
+      <div className="flex gap-6">
+        {/* Category Sidebar - hidden on mobile, visible on desktop */}
+        {categoriesData && (
+          <div className="hidden lg:block w-72 flex-shrink-0">
+            <div className="sticky top-4">
+              <CategorySidebar
+                categories={categoriesData.categories}
+                selectedCategory={selectedCategory}
+                onSelectCategory={setSelectedCategory}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <div className="flex-1 min-w-0 space-y-4">
+          {/* Filters Row */}
+          <div className="bg-white rounded-xl border p-4">
+            <div className="flex flex-wrap gap-4">
+              {/* Search */}
+              <div className="flex-1 min-w-[200px]">
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  />
+                  <svg
+                    className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Sort */}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as StaplesFilters['sort'])}
+                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 bg-white"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Clear Filters */}
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="px-4 py-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Results Count */}
+          <div className="flex justify-between items-center">
+            <p className="text-gray-500">
+              {isLoading
+                ? 'Loading...'
+                : `Showing ${products.length} of ${total} products`}
+            </p>
+            {isFetching && !isLoading && (
+              <span className="text-sm text-purple-600">Updating...</span>
+            )}
+          </div>
+
+          {/* Loading State */}
+          {isLoading ? (
+            <div className="flex items-center justify-center min-h-[400px]">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600" />
+            </div>
+          ) : products.length > 0 ? (
+            <>
+              {/* Products Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                {products.map((product, index) => (
+                  <StapleCard
+                    key={`${product.id}-${index}`}
+                    product={product}
+                  />
+                ))}
+              </div>
+
+              {/* Infinite Scroll Trigger */}
+              <LoadMoreTrigger
+                onLoadMore={handleLoadMore}
+                hasMore={!!hasNextPage}
+                isLoading={isFetchingNextPage}
+              />
+            </>
+          ) : (
+            <div className="bg-white rounded-xl border p-12 text-center">
+              <div className="text-5xl mb-4">🔍</div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No products found
+              </h3>
+              <p className="text-gray-500 max-w-md mx-auto">
+                {hasActiveFilters
+                  ? 'No products match your filters. Try adjusting your search or clearing filters.'
+                  : 'There are no products available at the moment.'}
+              </p>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="mt-4 px-6 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -6,14 +6,7 @@
  */
 import { useState, memo } from 'react';
 import { useFreshFoods } from '../../api/hooks';
-import type { FreshFoodItem, FreshFoodStorePrice } from '../../types';
-
-const STORE_COLORS: Record<string, string> = {
-  woolworths: 'bg-[#00A651]',
-  coles: 'bg-[#E01A22]',
-  aldi: 'bg-[#00448C]',
-  iga: 'bg-[#FF6B00]',
-};
+import type { FreshFoodItem } from '../../types';
 
 const STORE_TEXT_COLORS: Record<string, string> = {
   woolworths: 'text-[#00A651]',
