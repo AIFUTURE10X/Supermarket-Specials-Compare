@@ -746,6 +746,10 @@ def _extract_special_type(name: str, brand: str | None) -> str:
         brand_pattern = re.compile(re.escape(brand), re.IGNORECASE)
         product_type = brand_pattern.sub("", product_type).strip()
 
+        # If removing brand leaves empty string, use original name
+        if not product_type:
+            product_type = name
+
     # Remove size info from the end (e.g., "180g", "2L", "500ml")
     product_type = re.sub(r'\s*\d+\s*(g|kg|ml|l|pk|pack|each)\s*$', '', product_type, flags=re.IGNORECASE)
 
@@ -758,32 +762,71 @@ def _extract_special_type(name: str, brand: str | None) -> str:
 
 def _is_similar_type(type1: str, type2: str) -> bool:
     """Check if two product types are similar enough to compare."""
-    # Normalize both types
     t1 = type1.lower().strip()
     t2 = type2.lower().strip()
+
+    # Skip empty types
+    if not t1 or not t2:
+        return False
 
     # Exact match
     if t1 == t2:
         return True
 
-    # One contains the other (e.g., "Full Cream Milk" matches "Milk")
-    if t1 in t2 or t2 in t1:
+    # Normalize common plurals for produce
+    def normalize_plural(s: str) -> str:
+        # Handle common plural patterns
+        if s.endswith('oes'):  # mangoes -> mango, tomatoes -> tomato
+            return s[:-2]
+        if s.endswith('ies'):  # cherries -> cherry
+            return s[:-3] + 'y'
+        if s.endswith('es'):   # peaches -> peach
+            return s[:-2]
+        if s.endswith('s'):    # apples -> apple
+            return s[:-1]
+        return s
+
+    t1_norm = normalize_plural(t1)
+    t2_norm = normalize_plural(t2)
+
+    # Check normalized exact match
+    if t1_norm == t2_norm:
         return True
 
-    # Check for word overlap
+    # Containment check - but only for meaningful lengths (>3 chars)
+    # This prevents "s" or "es" from matching everything
+    if len(t1) > 3 and len(t2) > 3:
+        if t1 in t2 or t2 in t1:
+            return True
+        if t1_norm in t2_norm or t2_norm in t1_norm:
+            return True
+
+    # Word overlap check
     words1 = set(t1.split())
     words2 = set(t2.split())
 
-    # Remove common words that don't help with matching
-    common_words = {'the', 'a', 'an', 'and', 'or', 'of', 'with', 'in', 'on'}
+    # Remove common filler words
+    common_words = {'the', 'a', 'an', 'and', 'or', 'of', 'with', 'in', 'on',
+                    'fresh', 'australian', 'coles', 'woolworths', 'aldi', 'iga'}
     words1 = words1 - common_words
     words2 = words2 - common_words
 
-    # If more than half the words match, consider it similar
-    if words1 and words2:
-        overlap = len(words1 & words2)
-        min_words = min(len(words1), len(words2))
-        if overlap >= min_words / 2:
-            return True
+    if not words1 or not words2:
+        return False
 
-    return False
+    # Normalize words for comparison
+    words1_norm = {normalize_plural(w) for w in words1}
+    words2_norm = {normalize_plural(w) for w in words2}
+
+    # Check for overlap in normalized words
+    overlap = len(words1_norm & words2_norm)
+
+    # For produce (typically 1-2 significant words), require actual word match
+    min_words = min(len(words1_norm), len(words2_norm))
+
+    if min_words <= 2:
+        # Must have at least 1 word in common
+        return overlap >= 1
+    else:
+        # For longer product names, 50% overlap is ok
+        return overlap >= min_words / 2
