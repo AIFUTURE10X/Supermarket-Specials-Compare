@@ -33,5 +33,24 @@ def get_db():
 
 
 def init_db():
-    """Initialize database tables."""
+    """Initialize database tables and seed default data."""
     Base.metadata.create_all(bind=engine)
+
+    # Seed default stores if none exist
+    from app.models import Store
+    db = SessionLocal()
+    try:
+        if db.query(Store).count() == 0:
+            print("Seeding default stores...")
+            default_stores = [
+                Store(name="Woolworths", slug="woolworths", logo_url="https://www.woolworths.com.au/static/wowlogo/logo.svg", website_url="https://www.woolworths.com.au", specials_day="wednesday"),
+                Store(name="Coles", slug="coles", logo_url="https://www.coles.com.au/content/dam/coles/coles-logo.svg", website_url="https://www.coles.com.au", specials_day="wednesday"),
+                Store(name="ALDI", slug="aldi", logo_url="https://www.aldi.com.au/static/aldi/logo.svg", website_url="https://www.aldi.com.au", specials_day="wednesday"),
+                Store(name="IGA", slug="iga", logo_url="https://www.iga.com.au/sites/default/files/IGA_Logo.png", website_url="https://www.iga.com.au", specials_day="wednesday"),
+            ]
+            for store in default_stores:
+                db.add(store)
+            db.commit()
+            print(f"Seeded {len(default_stores)} stores")
+    finally:
+        db.close()
