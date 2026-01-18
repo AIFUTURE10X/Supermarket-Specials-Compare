@@ -24,6 +24,38 @@ from app.services.openfoodfacts_import import (
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+@router.get("/debug/dates")
+def debug_dates():
+    """Debug endpoint to check dates and specials counts."""
+    from app.models import Special
+    from datetime import date
+    from sqlalchemy import func, distinct
+
+    db = SessionLocal()
+    try:
+        today = date.today()
+
+        # Get distinct valid_to dates
+        dates = db.query(distinct(Special.valid_to)).order_by(Special.valid_to).all()
+
+        # Count valid specials
+        valid_count = db.query(Special).filter(Special.valid_to >= today).count()
+        total_count = db.query(Special).count()
+
+        # Sample a few specials to check
+        samples = db.query(Special.name, Special.valid_to).limit(5).all()
+
+        return {
+            "server_today": str(today),
+            "valid_to_dates": [str(d[0]) for d in dates if d[0]],
+            "total_specials": total_count,
+            "valid_specials": valid_count,
+            "samples": [{"name": s[0][:50], "valid_to": str(s[1])} for s in samples]
+        }
+    finally:
+        db.close()
+
+
 # Default stores to seed
 DEFAULT_STORES = [
     {"name": "Woolworths", "slug": "woolworths", "logo_url": "https://www.woolworths.com.au/static/wowlogo/logo.svg", "website_url": "https://www.woolworths.com.au", "specials_day": "wednesday"},
