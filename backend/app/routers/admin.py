@@ -71,6 +71,21 @@ class SpecialImport(BaseModel):
     discount_percent: Optional[int] = None
 
 
+@router.delete("/clear-specials")
+def clear_specials():
+    """Clear all specials from the database."""
+    from app.models import Special
+
+    db = SessionLocal()
+    try:
+        count = db.query(Special).count()
+        db.query(Special).delete()
+        db.commit()
+        return {"message": "Specials cleared", "deleted": count}
+    finally:
+        db.close()
+
+
 @router.post("/import-specials")
 def import_specials(specials: list[SpecialImport]):
     """Import specials directly into the database."""
