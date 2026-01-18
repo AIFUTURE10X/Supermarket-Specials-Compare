@@ -181,6 +181,47 @@ def clear_specials():
         db.close()
 
 
+@router.post("/migrate-schema")
+def migrate_schema():
+    """Add missing columns to database tables."""
+    from sqlalchemy import text
+    from app.config import get_settings
+
+    settings = get_settings()
+    db = SessionLocal()
+    migrations_done = []
+
+    try:
+        # Check if product_url column exists in specials table
+        if settings.database_url.startswith("postgresql"):
+            # PostgreSQL
+            result = db.execute(text("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'specials' AND column_name = 'product_url'
+            """)).fetchone()
+
+            if not result:
+                db.execute(text("ALTER TABLE specials ADD COLUMN product_url TEXT"))
+                db.commit()
+                migrations_done.append("Added product_url column to specials table")
+        else:
+            # SQLite
+            result = db.execute(text("PRAGMA table_info(specials)")).fetchall()
+            columns = [row[1] for row in result]
+
+            if 'product_url' not in columns:
+                db.execute(text("ALTER TABLE specials ADD COLUMN product_url TEXT"))
+                db.commit()
+                migrations_done.append("Added product_url column to specials table")
+
+        if not migrations_done:
+            return {"message": "No migrations needed", "migrations": []}
+
+        return {"message": "Migrations completed", "migrations": migrations_done}
+    finally:
+        db.close()
+
+
 @router.post("/import-specials")
 def import_specials(specials: list[SpecialImport]):
     """Import specials directly into the database."""
