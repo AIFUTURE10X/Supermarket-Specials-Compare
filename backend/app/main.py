@@ -40,8 +40,7 @@ app = FastAPI(
     title="Supermarket Specials API",
     description="Find weekly specials from Woolworths, Coles, and ALDI",
     version="2.0.0",
-    lifespan=lifespan,
-    redirect_slashes=False  # Prevent 307 redirects for missing trailing slashes
+    lifespan=lifespan
 )
 
 # CORS middleware

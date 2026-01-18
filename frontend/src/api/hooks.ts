@@ -165,7 +165,8 @@ export function useSpecialsInfinite(filters: SpecialsFilters) {
       params.set('limit', '50');
 
       const query = params.toString();
-      const data = await fetchJson<SpecialsPageV1>(`${SPECIALS_BASE}${query ? `?${query}` : ''}`);
+      // Note: API expects trailing slash before query params
+      const data = await fetchJson<SpecialsPageV1>(`${SPECIALS_BASE}/${query ? `?${query}` : ''}`);
 
       // Normalize response to match v2 format for frontend consistency
       return {
@@ -215,7 +216,8 @@ export function usePrefetchSpecials() {
         params.set('limit', '50');
 
         const query = params.toString();
-        const data = await fetchJson<SpecialsPageV1>(`${SPECIALS_BASE}${query ? `?${query}` : ''}`);
+        // Note: API expects trailing slash before query params
+        const data = await fetchJson<SpecialsPageV1>(`${SPECIALS_BASE}/${query ? `?${query}` : ''}`);
 
         return {
           items: data.items,
