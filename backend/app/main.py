@@ -97,9 +97,10 @@ def list_stores():
 
 @app.post("/api/import-specials")
 def import_specials_direct(specials: list[dict]):
-    """Import specials directly into the database."""
+    """Import specials directly into the database using raw SQL to ensure all columns are saved."""
     from app.database import SessionLocal
-    from app.models import Store, Special
+    from app.models import Store
+    from sqlalchemy import text
     from datetime import datetime, timedelta
 
     db = SessionLocal()
@@ -109,28 +110,38 @@ def import_specials_direct(specials: list[dict]):
 
         created = 0
         skipped = 0
+        valid_from = datetime.now().date()
+        valid_to = (datetime.now() + timedelta(days=7)).date()
+        now = datetime.now()
+
         for item in specials:
             store_slug = item.get('store_slug')
             if store_slug not in stores:
                 skipped += 1
                 continue
 
-            # Create special
-            special = Special(
-                store_id=stores[store_slug],
-                name=item.get('product_name'),
-                brand=item.get('brand'),
-                size=item.get('size'),
-                category=item.get('category'),
-                price=item.get('price'),
-                was_price=item.get('was_price'),
-                discount_percent=item.get('discount_percent'),
-                image_url=item.get('image_url'),
-                valid_from=datetime.now().date(),
-                valid_to=(datetime.now() + timedelta(days=7)).date(),
-                scraped_at=datetime.now()
-            )
-            db.add(special)
+            # Use raw SQL to ensure product_url is saved (ORM caching issue workaround)
+            db.execute(text("""
+                INSERT INTO specials (store_id, name, brand, size, category, price, was_price,
+                    discount_percent, image_url, product_url, valid_from, valid_to, scraped_at, created_at)
+                VALUES (:store_id, :name, :brand, :size, :category, :price, :was_price,
+                    :discount_percent, :image_url, :product_url, :valid_from, :valid_to, :scraped_at, :created_at)
+            """), {
+                "store_id": stores[store_slug],
+                "name": item.get('product_name', '')[:255] if item.get('product_name') else '',
+                "brand": item.get('brand'),
+                "size": item.get('size'),
+                "category": item.get('category'),
+                "price": item.get('price'),
+                "was_price": item.get('was_price'),
+                "discount_percent": item.get('discount_percent'),
+                "image_url": item.get('image_url'),
+                "product_url": item.get('product_url'),
+                "valid_from": valid_from,
+                "valid_to": valid_to,
+                "scraped_at": now,
+                "created_at": now
+            })
             created += 1
 
         db.commit()
