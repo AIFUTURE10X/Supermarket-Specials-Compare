@@ -56,6 +56,68 @@ def debug_dates():
         db.close()
 
 
+@router.get("/debug/staples-matching")
+def debug_staples_matching():
+    """Debug endpoint to see how staples keyword matching works."""
+    from app.models import Special
+    from app.routers.staples import STAPLE_CATEGORIES, EXCLUSION_KEYWORDS, _get_category_for_special
+    from datetime import date
+    from sqlalchemy import or_
+
+    db = SessionLocal()
+    try:
+        today = date.today()
+
+        # Get all staple category IDs
+        all_cat_ids = []
+        for cat_config in STAPLE_CATEGORIES.values():
+            all_cat_ids.extend(cat_config["category_ids"])
+            all_cat_ids.extend(cat_config.get("parent_ids", []))
+        all_cat_ids = list(set(all_cat_ids))
+
+        # Query same as staples router
+        specials = db.query(Special).filter(
+            Special.valid_to >= today,
+            or_(
+                Special.category_id.in_(all_cat_ids),
+                Special.category_id.is_(None)
+            )
+        ).all()
+
+        matched = []
+        excluded = []
+        no_match = []
+
+        for special in specials:
+            name_lower = special.name.lower() if special.name else ""
+
+            # Check exclusions
+            is_excluded = any(excl in name_lower for excl in EXCLUSION_KEYWORDS)
+
+            if is_excluded:
+                excluded.append(special.name[:60])
+                continue
+
+            # Check category matching
+            cat_slug, _ = _get_category_for_special(special, db)
+            if cat_slug:
+                matched.append({"name": special.name[:60], "category": cat_slug})
+            else:
+                no_match.append(special.name[:60])
+
+        return {
+            "total_queried": len(specials),
+            "matched_count": len(matched),
+            "excluded_count": len(excluded),
+            "no_match_count": len(no_match),
+            "sample_matched": matched[:10],
+            "sample_excluded": excluded[:10],
+            "sample_no_match": no_match[:10]
+        }
+    finally:
+        db.close()
+
+
 # Default stores to seed
 DEFAULT_STORES = [
     {"name": "Woolworths", "slug": "woolworths", "logo_url": "https://www.woolworths.com.au/static/wowlogo/logo.svg", "website_url": "https://www.woolworths.com.au", "specials_day": "wednesday"},
