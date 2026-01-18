@@ -6,6 +6,7 @@ from app.database import SessionLocal
 from app.tasks.scheduler import (
     get_scheduler_status,
     trigger_manual_update,
+    trigger_salefinder_update,
     start_scheduler,
     stop_scheduler
 )
@@ -21,6 +22,40 @@ from app.services.openfoodfacts_import import (
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+# Default stores to seed
+DEFAULT_STORES = [
+    {"name": "Woolworths", "slug": "woolworths", "logo_url": "https://www.woolworths.com.au/static/wowlogo/logo.svg", "website_url": "https://www.woolworths.com.au", "specials_day": "wednesday"},
+    {"name": "Coles", "slug": "coles", "logo_url": "https://www.coles.com.au/content/dam/coles/coles-logo.svg", "website_url": "https://www.coles.com.au", "specials_day": "wednesday"},
+    {"name": "ALDI", "slug": "aldi", "logo_url": "https://www.aldi.com.au/static/aldi/logo.svg", "website_url": "https://www.aldi.com.au", "specials_day": "wednesday"},
+    {"name": "IGA", "slug": "iga", "logo_url": "https://www.iga.com.au/sites/default/files/IGA_Logo.png", "website_url": "https://www.iga.com.au", "specials_day": "wednesday"},
+]
+
+
+@router.post("/seed-stores")
+def seed_stores():
+    """Initialize the database with default stores."""
+    from app.models import Store
+
+    db = SessionLocal()
+    try:
+        # Check if stores already exist
+        existing = db.query(Store).count()
+        if existing > 0:
+            return {"message": f"Stores already exist ({existing} found)", "created": 0}
+
+        # Create default stores
+        created = 0
+        for store_data in DEFAULT_STORES:
+            store = Store(**store_data)
+            db.add(store)
+            created += 1
+
+        db.commit()
+        return {"message": "Stores seeded successfully", "created": created}
+    finally:
+        db.close()
 
 
 @router.get("/scheduler/status")
@@ -182,3 +217,95 @@ def openfoodfacts_import(
         return result
     finally:
         db.close()
+
+
+# ============== SaleFinder Integration ==============
+
+@router.post("/salefinder/scrape")
+def salefinder_scrape(store: str | None = None):
+    """
+    Manually trigger a SaleFinder scrape.
+
+    Args:
+        store: Optional store slug (woolworths, coles).
+               If not provided, scrapes all configured stores.
+    """
+    result = trigger_salefinder_update(store)
+
+    if "error" in result and "not configured" in result.get("error", "").lower():
+        raise HTTPException(status_code=404, detail=result["error"])
+
+    return result
+
+
+@router.get("/salefinder/catalogues/{store}")
+def salefinder_catalogues(store: str):
+    """
+    List available catalogues for a store from SaleFinder.
+
+    Args:
+        store: Store slug (woolworths, coles)
+    """
+    from app.services.salefinder_scraper import SaleFinderScraper
+
+    scraper = SaleFinderScraper()
+    try:
+        catalogues = scraper.discover_catalogues(store)
+        return {
+            "store": store,
+            "catalogues": catalogues
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch catalogues: {str(e)}")
+
+
+@router.get("/salefinder/status")
+def salefinder_status():
+    """Get last SaleFinder scrape status."""
+    status = get_scheduler_status()
+    return {
+        "last_scrape": status.get("last_salefinder_scrape", {}),
+        "next_scheduled": next(
+            (job["next_run"] for job in status.get("jobs", [])
+             if job["id"] == "weekly_salefinder_scrape"),
+            None
+        )
+    }
+
+
+@router.post("/scrape")
+def unified_scrape(
+    source: str = "salefinder",
+    store: str | None = None
+):
+    """
+    Trigger a scrape with source selection.
+
+    Args:
+        source: Data source to use - 'salefinder', 'firecrawl', or 'both'
+        store: Optional store slug. If not provided, scrapes all stores.
+    """
+    results = {}
+
+    if source in ("salefinder", "both"):
+        sf_result = trigger_salefinder_update(store)
+        results["salefinder"] = sf_result
+
+    if source in ("firecrawl", "both"):
+        # Use existing Firecrawl trigger (via catalogue update)
+        fc_result = trigger_manual_update(store)
+        results["firecrawl"] = fc_result
+
+    if source not in ("salefinder", "firecrawl", "both"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid source: {source}. Must be 'salefinder', 'firecrawl', or 'both'"
+        )
+
+    return {
+        "source": source,
+        "store": store or "all",
+        "results": results
+    }
