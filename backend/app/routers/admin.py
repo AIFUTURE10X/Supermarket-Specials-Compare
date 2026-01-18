@@ -222,6 +222,77 @@ def migrate_schema():
         db.close()
 
 
+@router.get("/debug/specials-raw")
+def debug_specials_raw():
+    """Debug: Get raw specials data via direct SQL."""
+    from sqlalchemy import text
+
+    db = SessionLocal()
+    try:
+        result = db.execute(text("""
+            SELECT id, name, product_url, image_url
+            FROM specials
+            ORDER BY id DESC
+            LIMIT 5
+        """)).fetchall()
+
+        return {
+            "specials": [
+                {
+                    "id": row[0],
+                    "name": row[1][:50] if row[1] else None,
+                    "product_url": row[2],
+                    "image_url": row[3][:50] if row[3] else None
+                }
+                for row in result
+            ]
+        }
+    finally:
+        db.close()
+
+
+@router.post("/debug/test-insert-url")
+def test_insert_url():
+    """Debug: Test direct SQL insert of product_url."""
+    from sqlalchemy import text
+    from datetime import datetime, timedelta
+
+    db = SessionLocal()
+    try:
+        # Get store ID for aldi
+        result = db.execute(text("SELECT id FROM stores WHERE slug = 'aldi'")).fetchone()
+        store_id = result[0] if result else 3
+
+        # Insert via raw SQL
+        db.execute(text("""
+            INSERT INTO specials (store_id, name, price, product_url, image_url, valid_from, valid_to, scraped_at, created_at)
+            VALUES (:store_id, :name, :price, :product_url, :image_url, :valid_from, :valid_to, NOW(), NOW())
+        """), {
+            "store_id": store_id,
+            "name": "TEST RAW SQL INSERT",
+            "price": 99.99,
+            "product_url": "https://test-raw-sql-url.com/product",
+            "image_url": "https://test-image.com/img.jpg",
+            "valid_from": datetime.now().date(),
+            "valid_to": (datetime.now() + timedelta(days=7)).date()
+        })
+        db.commit()
+
+        # Read it back
+        result = db.execute(text("""
+            SELECT id, name, product_url FROM specials WHERE name = 'TEST RAW SQL INSERT' ORDER BY id DESC LIMIT 1
+        """)).fetchone()
+
+        return {
+            "inserted": True,
+            "id": result[0] if result else None,
+            "name": result[1] if result else None,
+            "product_url": result[2] if result else None
+        }
+    finally:
+        db.close()
+
+
 @router.post("/import-specials")
 def import_specials(specials: list[SpecialImport]):
     """Import specials directly into the database."""
