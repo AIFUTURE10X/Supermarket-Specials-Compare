@@ -58,6 +58,61 @@ def seed_stores():
         db.close()
 
 
+class SpecialImport(BaseModel):
+    """Single special item for import."""
+    product_name: str
+    store_slug: str
+    price: float
+    was_price: Optional[float] = None
+    brand: Optional[str] = None
+    size: Optional[str] = None
+    category: Optional[str] = None
+    image_url: Optional[str] = None
+    discount_percent: Optional[int] = None
+
+
+@router.post("/import-specials")
+def import_specials(specials: list[SpecialImport]):
+    """Import specials directly into the database."""
+    from app.models import Store, Special
+    from datetime import datetime, timedelta
+
+    db = SessionLocal()
+    try:
+        # Get store mapping
+        stores = {s.slug: s.id for s in db.query(Store).all()}
+
+        created = 0
+        skipped = 0
+        for item in specials:
+            if item.store_slug not in stores:
+                skipped += 1
+                continue
+
+            # Create special
+            special = Special(
+                store_id=stores[item.store_slug],
+                name=item.product_name,
+                brand=item.brand,
+                size=item.size,
+                category=item.category,
+                price=item.price,
+                was_price=item.was_price,
+                discount_percent=item.discount_percent,
+                image_url=item.image_url,
+                valid_from=datetime.now().date(),
+                valid_to=(datetime.now() + timedelta(days=7)).date(),
+                scraped_at=datetime.now()
+            )
+            db.add(special)
+            created += 1
+
+        db.commit()
+        return {"message": "Specials imported", "created": created, "skipped": skipped}
+    finally:
+        db.close()
+
+
 @router.get("/scheduler/status")
 def scheduler_status():
     """Get the current scheduler status and last run results."""
