@@ -162,6 +162,7 @@ class SpecialImport(BaseModel):
     size: Optional[str] = None
     category: Optional[str] = None
     image_url: Optional[str] = None
+    product_url: Optional[str] = None
     discount_percent: Optional[int] = None
 
 
@@ -209,6 +210,7 @@ def import_specials(specials: list[SpecialImport]):
                 was_price=item.was_price,
                 discount_percent=item.discount_percent,
                 image_url=item.image_url,
+                product_url=item.product_url,
                 valid_from=datetime.now().date(),
                 valid_to=(datetime.now() + timedelta(days=7)).date(),
                 scraped_at=datetime.now()
